@@ -1,5 +1,10 @@
-all:
-	gcc -o arp arp.c
+all: send_arp
 
+send_arp: arp.o
+	gcc -g -o send_arp arp.o -lpcap
+
+arp.o:
+	gcc -g -c -o arp.o arp.c
+	
 clean:
-	rm -rf arp
+	rm -rf arp.o send_arp
