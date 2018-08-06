@@ -1,11 +1,12 @@
 #include <pcap.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <arpa/inet.h>
 
 #define ETHER_HEADER_SIZE 14
-const uint8_t MY_MAC_ADDRESS[6] = {0x00,0x0c,0x29,0xc2,0xbd,0xe9};
-const uint8_t BROADCAST_MAC_ADDRESS[6] = {0Xff,0xff,0xff,0xff,0xff,0xff};
+
 typedef struct _ether_header{
         uint8_t         destination_mac_address[6];
         uint8_t         source_mac_address[6];
@@ -29,21 +30,19 @@ typedef struct _arp_header{
 int arpAttack(pcap_t*, char*, char*);
 void sendArp(pcap_t*, uint32_t, uint32_t, uint8_t*, uint8_t*);
 void printE(ether_header);
+void printA(arp_header);
 uint32_t ipParser(char*);
 
 int arpAttack(pcap_t* handle, char* sender_ip, char* target_ip ){
+	printf("arpAttack function begin\n");
 	uint8_t	sender_mac_address[6];
 	unsigned char* buffer;
 	uint32_t sender_ips, target_ips;
 
-	printf("!");
-
 	sender_ips = ipParser(sender_ip);
 	target_ips = ipParser(target_ip);
 
-	printf("%x\n%x\n", sender_ips, target_ips);
-
-//	sendArp(handle, sender_ip, target_ip, NULL, NULL);
+	sendArp(handle, sender_ips, target_ips, NULL, NULL);
 	
 
 }
@@ -51,36 +50,53 @@ int arpAttack(pcap_t* handle, char* sender_ip, char* target_ip ){
 void sendArp(pcap_t* handle, uint32_t sender_ip, uint32_t target_ip,
 	uint8_t*  source_mac_address, uint8_t* destination_mac_address ){
 
+	printf("sendArp function begin\n");
 	ether_header ether;
         arp_header arp;
 	
 	struct	pcap_pkthdr*	header;
 	const	u_char*		packet;
 
+	unsigned char my_mac_address[6] = {0x00,0x0c,0x29,0xc2,0xbd,0xe9};
+	unsigned char broadcast_mac_address[6] = {0Xff,0xff,0xff,0xff,0xff,0xff};
+
+
+
 	if(source_mac_address == NULL)
-		memcpy(ether.source_mac_address, MY_MAC_ADDRESS, 6);
+		memcpy(ether.source_mac_address, my_mac_address, 6);
 	else
                 memcpy(ether.source_mac_address, source_mac_address, 6);
 
 	if(destination_mac_address == NULL)
-		memcpy(ether.destination_mac_address, BROADCAST_MAC_ADDRESS, 6);
+		memcpy(ether.destination_mac_address, broadcast_mac_address, 6);
 	else
                 memcpy(ether.destination_mac_address, destination_mac_address, 6);
 
-	ether.type = 0x806;
+	ether.type = htons(0x806);
 
-	//printE(ether);
-
-	arp.hardware_type = 0x1;
+	printE(ether);
+	arp.hardware_type = 1;
+	printf("%x\n", arp.hardware_type);
 	arp.protocol_type = 0x0800;
 	arp.hardware_address_length = 0x6;
 	arp.protocol_address_length = 0x4;
 	arp.option = 0x0;
-	
+
+	uint32_t sip = htonl(sender_ip);
+	uint32_t tip = htonl(target_ip);	
+
 	memcpy(arp.source_mac_address, ether.source_mac_address, 6);
-	memcpy(arp.source_ip_address, sender_ip,4);
+	memcpy(arp.source_ip_address, &sip,4);
 	memcpy(arp.destination_mac_address, ether.destination_mac_address, 6);
-	memcpy(arp.destination_ip_address, target_ip, 4);
+	memcpy(arp.destination_ip_address, &tip, 4);
+	
+	printA(arp);
+
+	u_char buffer[43];
+	memcpy(buffer, &ether, sizeof(ether_header));
+	memcpy(&buffer[14], &arp, sizeof(arp_header));
+
+	pcap_sendpacket(handle, buffer, 43);
 
 	while(1){
 		int res = pcap_next_ex(handle, &header, &packet);
@@ -104,7 +120,7 @@ int sendFakeArp(){
 
 void printE(ether_header ether){
 	int i;
-              
+	printf("printE function begin\n");              
       	for(i = 0; i<6; i++){
 		if((unsigned char)ether.source_mac_address[i]<16)
 			printf("%x", 0);
@@ -128,13 +144,54 @@ void printE(ether_header ether){
 	 return;
 }
 
+void printA(arp_header arp){
+	int i;
+        printf("printA function begin\n");
+        for(i = 0; i<6; i++){
+                if((unsigned char)arp.source_mac_address[i]<16)
+                        printf("%x", 0);
+                printf("%x", arp.source_mac_address[i]);
+                if(i!=5)
+                        printf(":");
+         }
+         printf("\n");
+
+         for(i = 0; i<6; i++){
+                 if((unsigned char)arp.destination_mac_address[i]<16)
+                        printf("%x", 0);
+                 printf("%x", arp.destination_mac_address[i]);
+                 if(i!=5)
+                         printf(":");
+         }
+         printf("\n");
+
+	 for(i = 0; i<4; i++){
+		 printf("%d", arp.source_ip_address[i]);
+		 if(i!=3)
+			 printf(".");
+	 }
+	 printf("\n");
+
+	
+	 for(i = 0; i<4; i++){
+                 printf("%d", arp.destination_ip_address[i]);
+                 if(i!=3)
+                         printf(".");
+         }
+         printf("\n");
+
+	 
+	 return;
+}
+
 uint32_t ipParser(char* str){
+	printf("ipParser funtion begin\n");
 	uint32_t result = 0;
 	char buffer[4];
 	int i, j = 0;
 
 	for(i=0; i<strlen(str); i++){
-		if(str[i] == '.' || i == (strlen(str)-1)){
+		if(str[i] == '.' ){
 			buffer[j] = '\0';
 			result += atoi(buffer);
 			result <<= 8;
@@ -142,9 +199,11 @@ uint32_t ipParser(char* str){
 			continue;
 		}
 		buffer[j] = str[i];
+		j++;
 	}
-
-	printf("%x\n", result);
+	
+	buffer[j] = '\0';
+	result += atoi(buffer);
 
 	return result;
 }
@@ -166,8 +225,6 @@ int main(int argc, char* argv[]){
 		return -1;
 	}
 	
-	printf("@");
-
 	arpAttack(handle, argv[2], argv[3]);
 
 
