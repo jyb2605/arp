@@ -24,7 +24,7 @@ typedef struct _arp_header{
 	uint8_t		source_mac_address[6];
 	uint8_t		source_ip_address[4];
 	uint8_t         destination_mac_address[6];
-        uint8_t         destination_ip_address[4];
+	uint8_t		destination_ip_address[4];
 }arp_header;
 
 int arpAttack(pcap_t*, char*, char*);
@@ -96,7 +96,7 @@ int sendArp(pcap_t* handle, uint32_t sender_ip, uint32_t target_ip,
 
 	u_char buffer[42];
 	memcpy(buffer, &ether, sizeof(ether_header));
-	memcpy(&buffer[14], &arp, sizeof(arp_header));
+	memcpy(&buffer[ETHER_HEADER_SIZE], &arp, sizeof(arp_header));
 	
 
 	int res = pcap_sendpacket(handle, buffer, 42);
@@ -127,7 +127,7 @@ int sendArp(pcap_t* handle, uint32_t sender_ip, uint32_t target_ip,
 			break;
 		
 		memcpy(&ether, &packet[0], sizeof(ether_header));
-		memcpy(&arp, &packet[14], sizeof(arp_header));
+		memcpy(&arp, &packet[ETHER_HEADER_SIZE], sizeof(arp_header));
 
 		if( type == 0 )
 			return;
